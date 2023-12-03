@@ -1,0 +1,34 @@
+[package]
+name = "trace-viewer"
+
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+
+[[bin]]
+name = "trace-viewer"
+path = "src/main.rs"
+
+[dependencies]
+alloy-primitives.workspace = true
+clap = { version = "4", features = ["derive", "env", "unicode", "wrap_help"] }
+# [ethers-rs is being deprecated · Issue #2667 · gakonst/ethers-rs](https://github.com/gakonst/ethers-rs/issues/2667)
+# ethers-core.workspace = true
+# ethers-providers.workspace = true
+eyre.workspace = true
+# foundry-cli.workspace = true
+# foundry-common.workspace = true
+# foundry-compilers.workspace = true
+# foundry-config.workspace = true
+foundry-debugger.workspace = true
+foundry-evm.workspace = true
+foundry-evm-core.workspace = true
+hex.workspace = true
+revm.workspace = true
+serde.workspace = true
+serde_json.workspace = true
