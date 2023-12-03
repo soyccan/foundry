@@ -86,6 +86,7 @@ fn main() -> Result<()> {
 
     let mut prev_step: Option<GethStructLog> = None;
     let mut debugger = Debugger::default();
+    debugger.enter(0, Default::default(), Default::default());
     trace.iter_mut().for_each(|step| {
         let step = match step.take() {
             Some(step) => step,
@@ -93,17 +94,13 @@ fn main() -> Result<()> {
         };
         if let Some(prev_step) = prev_step.take() {
             if step.depth > prev_step.depth {
-                debugger.enter(
-                    prev_step.depth as usize,
-                    prev_step.code_address,
-                    Default::default(),
-                );
+                debugger.enter(step.depth as usize, step.code_address, Default::default());
             }
             if step.depth < prev_step.depth {
                 debugger.exit();
             }
         } else {
-            debugger.enter(0, step.code_address, Default::default());
+            debugger.enter(step.depth as usize, step.code_address, Default::default());
         }
         prev_step = Some(step.clone());
         debugger.arena.arena[debugger.head].steps.push(step.into());
