@@ -48,30 +48,24 @@ impl<'a, PI: ProxyInfo> EtherscanSync<'a, PI> {
         address: &str,
         bytecode_hash: &str,
     ) -> Result<()> {
-        info!("Syncing source code: address={:?} bytecode_hash={:?}", address, bytecode_hash);
+        debug!("Syncing source code: address={} bytecode_hash={}", address, bytecode_hash);
 
         if self.proxy_info.is_minimal_proxy(address)? {
-            debug!(
-                "Skipping minimal proxy: address={:?} bytecode_hash={:?}",
-                address, bytecode_hash
-            );
+            debug!("Skipping minimal proxy: address={} bytecode_hash={}", address, bytecode_hash);
             self.source_code_database.set_no_source_code(bytecode_hash)?;
             return Ok(());
         }
 
-        debug!("Fetching source code: address={:?} bytecode_hash={:?}", address, bytecode_hash);
+        info!("Fetching source code: address={} bytecode_hash={}", address, bytecode_hash);
         match self.etherscan.get_source_code(address).await {
             Ok(source_code) => {
-                debug!(
-                    "Saving source code: address={:?} bytecode_hash={:?}",
-                    address, bytecode_hash
-                );
+                debug!("Saving source code: address={} bytecode_hash={}", address, bytecode_hash);
                 self.source_code_database.save_source_code(address, bytecode_hash, source_code)?;
             }
             Err(e) => {
                 if let Some(EtherscanError::ContractCodeNotVerified(_)) = e.downcast_ref() {
                     debug!(
-                        "Source code not verified: address={:?} bytecode_hash={:?}",
+                        "Source code not verified: address={} bytecode_hash={}",
                         address, bytecode_hash
                     );
                     self.source_code_database.set_no_source_code(bytecode_hash)?;
@@ -97,7 +91,7 @@ impl Etherscan {
         })
     }
 
-    async fn get_source_code(&self, address: &str) -> Result<ContractMetadata> {
+    pub async fn get_source_code(&self, address: &str) -> Result<ContractMetadata> {
         self.client
             .contract_source_code(address.parse()?)
             .await
@@ -113,7 +107,7 @@ impl SourceCodeDatabase {
         })
     }
 
-    fn save_source_code(
+    pub fn save_source_code(
         &mut self,
         address: &str,
         bytecode_hash: &str,
@@ -177,7 +171,7 @@ impl SourceCodeDatabase {
             .wrap_err_with(|| "Failed to save source code into database")
     }
 
-    fn set_no_source_code(&mut self, bytecode_hash: &str) -> Result<()> {
+    pub fn set_no_source_code(&mut self, bytecode_hash: &str) -> Result<()> {
         diesel::insert_into(no_source_code::table)
             .values(NoSourceCodeDBRow { bytecode_hash: bytecode_hash.to_owned() })
             .on_conflict_do_nothing()

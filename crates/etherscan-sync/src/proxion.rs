@@ -1,17 +1,48 @@
 use crate::ProxyInfo;
-use diesel::{table, Connection, ExpressionMethods, PgConnection, QueryDsl, RunQueryDsl};
+use diesel::{
+    connection::DefaultLoadingMode, table, Connection as dConnection, ExpressionMethods, QueryDsl,
+    QueryResult, RunQueryDsl,
+};
 use eyre::{Result, WrapErr};
+use futures::stream::Stream;
+use sqlx::Connection as sConnection;
 
 pub struct ProxionDatabase {
-    connection: PgConnection,
+    connection: diesel::PgConnection,
+}
+
+pub struct ContractsDatabase {
+    connection: sqlx::PgConnection,
+}
+
+table! {
+    contracts (id) {
+        id -> Int4,
+        address -> Text,
+        block -> Int4,
+        year -> Int2,
+        bytecode_hash -> Nullable<Text>,
+        self_destructed -> Bool,
+    }
 }
 
 impl ProxionDatabase {
     pub fn connect(database_url: &str) -> Result<Self> {
         Ok(Self {
-            connection: PgConnection::establish(database_url)
+            connection: diesel::PgConnection::establish(database_url)
                 .wrap_err_with(|| "Failed to connect to the database")?,
         })
+    }
+
+    pub fn get_alive_contracts(
+        &mut self,
+    ) -> Result<impl Iterator<Item = QueryResult<(String, Option<String>)>>> {
+        // TODO: diesel does not support server-side cursor and row streaming
+        contracts::table
+            .select((contracts::address, contracts::bytecode_hash))
+            .filter(contracts::self_destructed.eq(false))
+            .load_iter::<_, DefaultLoadingMode>(&mut self.connection)
+            .wrap_err_with(|| "Failed to get contracts")
     }
 }
 
@@ -32,5 +63,22 @@ impl ProxyInfo for ProxionDatabase {
             .first::<Option<bool>>(&mut self.connection)
             .map(|x| x.unwrap_or(false))
             .wrap_err_with(|| format!("Failed to query minimal proxy: {}", address))
+    }
+}
+
+impl ContractsDatabase {
+    pub async fn connect(database_url: &str) -> Result<Self> {
+        Ok(Self {
+            connection: sqlx::PgConnection::connect(database_url)
+                .await
+                .wrap_err_with(|| "Failed to connect to the database")?,
+        })
+    }
+
+    pub fn get_alive_contracts(
+        &mut self,
+    ) -> impl Stream<Item = sqlx::Result<sqlx::postgres::PgRow>> + '_ {
+        sqlx::query("SELECT address, bytecode_hash FROM contracts WHERE NOT self_destructed")
+            .fetch(&mut self.connection)
     }
 }
