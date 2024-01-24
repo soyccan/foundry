@@ -1,7 +1,7 @@
 use dotenvy::dotenv;
-use etherscan_sync::{
+use ethersync::{
     proxion::{ContractsDatabase, ProxionDatabase},
-    Etherscan, EtherscanSync, SourceCodeDatabase,
+    EtherSync, Etherscan, SourceCodeDatabase,
 };
 use eyre::{eyre, Result};
 use futures::TryStreamExt;
@@ -19,8 +19,8 @@ async fn main() -> Result<()> {
         SourceCodeDatabase::connect(get_env_var("DATABASE_URL")?.as_str())?;
     let mut proxion_database =
         ProxionDatabase::connect(get_env_var("DATABASE_URL_PROXION")?.as_str())?;
-    let mut etherscan_sync =
-        EtherscanSync::new(&etherscan, &mut source_code_database, &mut proxion_database);
+    let mut ethersync =
+        EtherSync::new(&etherscan, &mut source_code_database, &mut proxion_database);
 
     let mut contracts_database =
         ContractsDatabase::connect(get_env_var("DATABASE_URL_PROXION")?.as_str()).await?;
@@ -41,7 +41,7 @@ async fn main() -> Result<()> {
                     continue;
                 }
             };
-            if let Err(e) = etherscan_sync
+            if let Err(e) = ethersync
                 .sync_source_code_to_database(address.as_str(), bytecode_hash.as_str())
                 .await
             {

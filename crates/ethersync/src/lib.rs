@@ -16,7 +16,7 @@ use foundry_block_explorers::{
 use log::{debug, info};
 use serde_json::json;
 
-pub struct EtherscanSync<'a, PI: ProxyInfo> {
+pub struct EtherSync<'a, PI: ProxyInfo> {
     etherscan: &'a Etherscan,
     source_code_database: &'a mut SourceCodeDatabase,
     proxy_info: &'a mut PI,
@@ -34,7 +34,7 @@ pub trait ProxyInfo: Sized {
     fn is_minimal_proxy(&mut self, address: &str) -> Result<bool>;
 }
 
-impl<'a, PI: ProxyInfo> EtherscanSync<'a, PI> {
+impl<'a, PI: ProxyInfo> EtherSync<'a, PI> {
     pub fn new(
         etherscan: &'a Etherscan,
         source_code_database: &'a mut SourceCodeDatabase,
