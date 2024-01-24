@@ -4,7 +4,8 @@ use ethersync::{
     EtherSync, Etherscan, SourceCodeDatabase,
 };
 use eyre::{eyre, Result};
-use futures::TryStreamExt;
+use foundry_block_explorers::Client as EtherscanClient;
+use futures::StreamExt;
 use log::{error, info};
 use sqlx::Row;
 use std::{env, time::Instant};
@@ -14,45 +15,65 @@ async fn main() -> Result<()> {
     env_logger::init();
     dotenv().ok();
 
-    let etherscan = Etherscan::new(get_env_var("ETHERSCAN_API_KEY")?.as_str())?;
-    let mut source_code_database =
-        SourceCodeDatabase::connect(get_env_var("DATABASE_URL")?.as_str())?;
-    let mut proxion_database =
-        ProxionDatabase::connect(get_env_var("DATABASE_URL_PROXION")?.as_str())?;
-    let mut ethersync =
-        EtherSync::new(&etherscan, &mut source_code_database, &mut proxion_database);
-
     let mut contracts_database =
         ContractsDatabase::connect(get_env_var("DATABASE_URL_PROXION")?.as_str()).await?;
 
     info!("Getting alive contracts");
     let start_time = Instant::now();
-    let mut alive_contracts = contracts_database.get_alive_contracts();
+    let alive_contracts = contracts_database.get_alive_contracts();
     info!("Got ? alive contracts in {}s", start_time.elapsed().as_secs());
 
-    while let Some(row) = alive_contracts.try_next().await? {
-        if let (Ok(address), Ok(bytecode_hash)) =
-            (row.try_get::<String, _>(0), row.try_get::<Option<String>, _>(1))
-        {
-            let bytecode_hash = match bytecode_hash {
-                Some(bytecode_hash) => bytecode_hash,
-                None => {
-                    error!("Null bytecode hash: address={}", address);
-                    continue;
+    alive_contracts
+        .for_each_concurrent(10, |row| async {
+            let row = match row {
+                Ok(row) => row,
+                Err(e) => {
+                    error!("Invalid row: {:#?}", e);
+                    return;
                 }
             };
-            if let Err(e) = ethersync
-                .sync_source_code_to_database(address.as_str(), bytecode_hash.as_str())
-                .await
+            if let (Ok(address), Ok(bytecode_hash)) =
+                (row.try_get::<String, _>(0), row.try_get::<Option<String>, _>(1))
             {
-                error!(
-                    "Failed to sync source code: address={} bytecode_hash={}: {:#?}",
-                    address, bytecode_hash, e
+                let bytecode_hash = match bytecode_hash {
+                    Some(bytecode_hash) => bytecode_hash,
+                    None => {
+                        error!("Null bytecode hash: address={}", address);
+                        return;
+                    }
+                };
+
+                let etherscan = Etherscan::new(
+                    EtherscanClient::builder()
+                        .with_api_key(get_env_var("ETHERSCAN_API_KEY").unwrap().as_str())
+                        .with_api_url(get_env_var("ETHERSCAN_API_URL").unwrap().as_str())
+                        .expect("c")
+                        .with_url(get_env_var("ETHERSCAN_API_URL").unwrap().as_str())
+                        .expect("a")
+                        .build()
+                        .expect("b"),
                 );
-                continue;
+                let mut source_code_database =
+                    SourceCodeDatabase::connect(get_env_var("DATABASE_URL").unwrap().as_str())
+                        .unwrap();
+                let mut proxion_database =
+                    ProxionDatabase::connect(get_env_var("DATABASE_URL_PROXION").unwrap().as_str())
+                        .unwrap();
+                let mut ethersync =
+                    EtherSync::new(&etherscan, &mut source_code_database, &mut proxion_database);
+
+                if let Err(e) = ethersync
+                    .sync_source_code_to_database(address.as_str(), bytecode_hash.as_str())
+                    .await
+                {
+                    error!(
+                        "Failed to sync source code: address={} bytecode_hash={}: {:#?}",
+                        address, bytecode_hash, e
+                    );
+                }
             }
-        }
-    }
+        })
+        .await;
     Ok(())
 }
 

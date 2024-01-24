@@ -6,12 +6,12 @@ use crate::{
     models::{NoSourceCodeDBRow, SourceCodeDBRow},
     schema::{etherscan_source_code, no_source_code},
 };
-use diesel::{Connection, PgConnection, RunQueryDsl};
+use diesel::{Connection, ExpressionMethods, PgConnection, QueryDsl, RunQueryDsl};
 use eyre::{Result, WrapErr};
 use foundry_block_explorers::{
     contract::{ContractMetadata, Metadata, SourceCodeLanguage, SourceCodeMetadata},
     errors::EtherscanError,
-    Client,
+    Client as EtherscanClient,
 };
 use log::{debug, info};
 use serde_json::json;
@@ -23,7 +23,7 @@ pub struct EtherSync<'a, PI: ProxyInfo> {
 }
 
 pub struct Etherscan {
-    client: Client,
+    client: EtherscanClient,
 }
 
 pub struct SourceCodeDatabase {
@@ -49,6 +49,19 @@ impl<'a, PI: ProxyInfo> EtherSync<'a, PI> {
         bytecode_hash: &str,
     ) -> Result<()> {
         debug!("Syncing source code: address={} bytecode_hash={}", address, bytecode_hash);
+
+        if self.source_code_database.is_no_source_code(bytecode_hash)? {
+            debug!("No source code: address={} bytecode_hash={}", address, bytecode_hash);
+            return Ok(());
+        }
+
+        if self.source_code_database.is_source_code_saved(address)? {
+            debug!(
+                "Source code already saved: address={} bytecode_hash={}",
+                address, bytecode_hash
+            );
+            return Ok(());
+        }
 
         if self.proxy_info.is_minimal_proxy(address)? {
             debug!("Skipping minimal proxy: address={} bytecode_hash={}", address, bytecode_hash);
@@ -79,16 +92,17 @@ impl<'a, PI: ProxyInfo> EtherSync<'a, PI> {
 }
 
 impl Etherscan {
-    pub fn new(api_key: &str) -> Result<Self> {
+    pub fn new(client: EtherscanClient) -> Self {
         // // load the Foundry config file at ~/.foundry/foundry.toml
         // let config = Config::load();
         // let chain = config.chain.unwrap_or_default();
         // let api_key =
         //     config.get_etherscan_api_key(Some(chain)).ok_or_eyre("No Etherscan API key found")?;
-        Ok(Self {
-            client: Client::new(Default::default(), api_key)
-                .wrap_err_with(|| "Failed to create Etherscan client")?,
-        })
+        // Ok(Self {
+        //     client: Client::new(Default::default(), api_key)
+        //         .wrap_err_with(|| "Failed to create Etherscan client")?,
+        // })
+        Self { client }
     }
 
     pub async fn get_source_code(&self, address: &str) -> Result<ContractMetadata> {
@@ -105,6 +119,22 @@ impl SourceCodeDatabase {
             connection: PgConnection::establish(database_url)
                 .wrap_err_with(|| "Failed to connect to the database")?,
         })
+    }
+
+    pub fn is_no_source_code(&mut self, bytecode_hash: &str) -> Result<bool> {
+        diesel::select(diesel::dsl::exists(
+            no_source_code::table.filter(no_source_code::bytecode_hash.eq(bytecode_hash)),
+        ))
+        .get_result(&mut self.connection)
+        .wrap_err_with(|| "Failed to check if no source code")
+    }
+
+    pub fn is_source_code_saved(&mut self, address: &str) -> Result<bool> {
+        diesel::select(diesel::dsl::exists(
+            etherscan_source_code::table.filter(etherscan_source_code::address.eq(address)),
+        ))
+        .get_result(&mut self.connection)
+        .wrap_err_with(|| "Failed to check if source code is saved")
     }
 
     pub fn save_source_code(
