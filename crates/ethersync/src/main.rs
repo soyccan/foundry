@@ -29,6 +29,13 @@ async fn main() -> Result<()> {
 
     let max_concurrent = 10u32;
 
+    let etherscan = Rc::new(Etherscan::new(
+        EtherscanClient::builder()
+            .with_api_key(get_env_var("ETHERSCAN_API_KEY")?.as_str())
+            .with_api_url(get_env_var("ETHERSCAN_API_URL")?.as_str())?
+            .with_url(get_env_var("ETHERSCAN_API_URL")?.as_str())?
+            .build()?,
+    ));
     let source_code_db_conn = Rc::new(RefCell::new(
         Pool::builder()
             .max_size(max_concurrent)
@@ -64,16 +71,6 @@ async fn main() -> Result<()> {
                     }
                 };
 
-                let etherscan = Etherscan::new(
-                    EtherscanClient::builder()
-                        .with_api_key(get_env_var("ETHERSCAN_API_KEY").unwrap().as_str())
-                        .with_api_url(get_env_var("ETHERSCAN_API_URL").unwrap().as_str())
-                        .expect("c")
-                        .with_url(get_env_var("ETHERSCAN_API_URL").unwrap().as_str())
-                        .expect("a")
-                        .build()
-                        .expect("b"),
-                );
                 let mut source_code_database =
                     SourceCodeDatabase::new(source_code_db_conn.borrow().get().unwrap());
                 let mut proxion_database =
