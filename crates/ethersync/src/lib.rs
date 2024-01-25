@@ -6,7 +6,10 @@ use crate::{
     models::{NoSourceCodeDBRow, SourceCodeDBRow},
     schema::{etherscan_source_code, no_source_code},
 };
-use diesel::{Connection, ExpressionMethods, PgConnection, QueryDsl, RunQueryDsl};
+use diesel::{
+    r2d2::{ConnectionManager, PooledConnection},
+    ExpressionMethods, PgConnection, QueryDsl, RunQueryDsl,
+};
 use eyre::{Result, WrapErr};
 use foundry_block_explorers::{
     contract::{ContractMetadata, Metadata, SourceCodeLanguage, SourceCodeMetadata},
@@ -27,7 +30,7 @@ pub struct Etherscan {
 }
 
 pub struct SourceCodeDatabase {
-    connection: PgConnection,
+    connection: PooledConnection<ConnectionManager<PgConnection>>,
 }
 
 pub trait ProxyInfo: Sized {
@@ -114,12 +117,19 @@ impl Etherscan {
 }
 
 impl SourceCodeDatabase {
-    pub fn connect(database_url: &str) -> Result<Self> {
-        Ok(Self {
-            connection: PgConnection::establish(database_url)
-                .wrap_err_with(|| "Failed to connect to the database")?,
-        })
+    pub fn new(connection: PooledConnection<ConnectionManager<PgConnection>>) -> Self {
+        Self { connection }
     }
+
+    // TODO: make connection generic
+    // pub fn connect(database_url: &str) -> Result<Self> {
+    //     Ok(Self {
+    //         connection: BasePgConnection::Normal(
+    //             PgConnection::establish(database_url)
+    //                 .wrap_err_with(|| "Failed to connect to the database")?,
+    //         ),
+    //     })
+    // }
 
     pub fn is_no_source_code(&mut self, bytecode_hash: &str) -> Result<bool> {
         diesel::select(diesel::dsl::exists(

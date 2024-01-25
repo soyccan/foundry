@@ -1,14 +1,18 @@
+use diesel::{
+    r2d2::{ConnectionManager, Pool},
+    PgConnection,
+};
 use dotenvy::dotenv;
 use ethersync::{
     proxion::{ContractsDatabase, ProxionDatabase},
     EtherSync, Etherscan, SourceCodeDatabase,
 };
-use eyre::{eyre, Result};
+use eyre::{eyre, Result, WrapErr};
 use foundry_block_explorers::Client as EtherscanClient;
 use futures::StreamExt;
 use log::{error, info};
 use sqlx::Row;
-use std::{env, time::Instant};
+use std::{cell::RefCell, env, rc::Rc, time::Instant};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -23,8 +27,25 @@ async fn main() -> Result<()> {
     let alive_contracts = contracts_database.get_alive_contracts();
     info!("Got ? alive contracts in {}s", start_time.elapsed().as_secs());
 
+    let max_concurrent = 10u32;
+
+    let source_code_db_conn = Rc::new(RefCell::new(
+        Pool::builder()
+            .max_size(max_concurrent)
+            .build(ConnectionManager::<PgConnection>::new(get_env_var("DATABASE_URL")?.as_str()))
+            .wrap_err_with(|| "Failed to connect to the database")?,
+    ));
+    let proxion_db_conn = Rc::new(RefCell::new(
+        Pool::builder()
+            .max_size(max_concurrent)
+            .build(ConnectionManager::<PgConnection>::new(
+                get_env_var("DATABASE_URL_PROXION")?.as_str(),
+            ))
+            .wrap_err_with(|| "Failed to connect to the database")?,
+    ));
+
     alive_contracts
-        .for_each_concurrent(10, |row| async {
+        .for_each_concurrent(max_concurrent as usize, |row| async {
             let row = match row {
                 Ok(row) => row,
                 Err(e) => {
@@ -54,11 +75,9 @@ async fn main() -> Result<()> {
                         .expect("b"),
                 );
                 let mut source_code_database =
-                    SourceCodeDatabase::connect(get_env_var("DATABASE_URL").unwrap().as_str())
-                        .unwrap();
+                    SourceCodeDatabase::new(source_code_db_conn.borrow().get().unwrap());
                 let mut proxion_database =
-                    ProxionDatabase::connect(get_env_var("DATABASE_URL_PROXION").unwrap().as_str())
-                        .unwrap();
+                    ProxionDatabase::new(proxion_db_conn.borrow().get().unwrap());
                 let mut ethersync =
                     EtherSync::new(&etherscan, &mut source_code_database, &mut proxion_database);
 

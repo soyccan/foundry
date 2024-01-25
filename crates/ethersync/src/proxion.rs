@@ -1,14 +1,15 @@
 use crate::ProxyInfo;
 use diesel::{
-    connection::DefaultLoadingMode, table, Connection as dConnection, ExpressionMethods, QueryDsl,
-    QueryResult, RunQueryDsl,
+    connection::DefaultLoadingMode,
+    r2d2::{ConnectionManager, PooledConnection},
+    table, Connection as dConnection, ExpressionMethods, QueryDsl, QueryResult, RunQueryDsl,
 };
 use eyre::{Result, WrapErr};
 use futures::stream::Stream;
 use sqlx::Connection as sConnection;
 
 pub struct ProxionDatabase {
-    connection: diesel::PgConnection,
+    connection: PooledConnection<ConnectionManager<diesel::PgConnection>>,
 }
 
 pub struct ContractsDatabase {
@@ -27,12 +28,16 @@ table! {
 }
 
 impl ProxionDatabase {
-    pub fn connect(database_url: &str) -> Result<Self> {
-        Ok(Self {
-            connection: diesel::PgConnection::establish(database_url)
-                .wrap_err_with(|| "Failed to connect to the database")?,
-        })
+    pub fn new(connection: PooledConnection<ConnectionManager<diesel::PgConnection>>) -> Self {
+        Self { connection }
     }
+
+    // pub fn connect(database_url: &str) -> Result<Self> {
+    //     Ok(Self {
+    //         connection: diesel::PgConnection::establish(database_url)
+    //             .wrap_err_with(|| "Failed to connect to the database")?,
+    //     })
+    // }
 
     pub fn get_alive_contracts(
         &mut self,
