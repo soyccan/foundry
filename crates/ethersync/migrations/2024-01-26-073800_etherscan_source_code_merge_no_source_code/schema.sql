@@ -33,18 +33,19 @@ CREATE TABLE public.etherscan_source_code (
     source_code_files jsonb,
     source_code_language text,
     source_code_settings jsonb,
-    abi jsonb NOT NULL,
-    contract_name text NOT NULL,
-    compiler_version text NOT NULL,
-    optimization_used integer NOT NULL,
-    runs integer NOT NULL,
-    constructor_arguments bytea NOT NULL,
-    evm_version text NOT NULL,
-    library text NOT NULL,
-    license_type text NOT NULL,
-    proxy boolean NOT NULL,
+    abi jsonb,
+    contract_name text,
+    compiler_version text,
+    optimization_used integer,
+    runs integer,
+    constructor_arguments bytea,
+    evm_version text,
+    library text,
+    license_type text,
+    proxy boolean,
     implementation text,
-    swarm_source text NOT NULL,
+    swarm_source text,
+    verified boolean NOT NULL,
     CONSTRAINT etherscan_source_code_address CHECK ((address ~ '^0x[0-9a-f]{40}$'::text)),
     CONSTRAINT etherscan_source_code_bytecode_hash CHECK ((bytecode_hash ~ '^0x[0-9a-f]{64}$'::text)),
     CONSTRAINT etherscan_source_code_implementation CHECK (((implementation IS NULL) OR (implementation ~ '^0x[0-9a-f]{40}$'::text)))
@@ -83,11 +84,11 @@ ALTER TABLE ONLY public.etherscan_source_code ALTER COLUMN id SET DEFAULT nextva
 
 
 --
--- Name: etherscan_source_code etherscan_source_code_address_key; Type: CONSTRAINT; Schema: public; Owner: proxychecker
+-- Name: etherscan_source_code etherscan_source_code_bytecode_hash_key; Type: CONSTRAINT; Schema: public; Owner: proxychecker
 --
 
 ALTER TABLE ONLY public.etherscan_source_code
-    ADD CONSTRAINT etherscan_source_code_address_key UNIQUE (address);
+    ADD CONSTRAINT etherscan_source_code_bytecode_hash_key UNIQUE (bytecode_hash);
 
 
 --
@@ -96,59 +97,6 @@ ALTER TABLE ONLY public.etherscan_source_code
 
 ALTER TABLE ONLY public.etherscan_source_code
     ADD CONSTRAINT etherscan_source_code_pkey PRIMARY KEY (id);
-
-
---
--- Name: etherscan_source_code_bytecode_hash; Type: INDEX; Schema: public; Owner: proxychecker
---
-
-CREATE INDEX etherscan_source_code_bytecode_hash ON public.etherscan_source_code USING btree (bytecode_hash);
-
-
---
--- PostgreSQL database dump complete
---
-
---
--- PostgreSQL database dump
---
-
--- Dumped from database version 16.0 (Debian 16.0-1.pgdg120+1)
--- Dumped by pg_dump version 16.0 (Debian 16.0-1.pgdg120+1)
-
-SET statement_timeout = 0;
-SET lock_timeout = 0;
-SET idle_in_transaction_session_timeout = 0;
-SET client_encoding = 'UTF8';
-SET standard_conforming_strings = on;
-SELECT pg_catalog.set_config('search_path', '', false);
-SET check_function_bodies = false;
-SET xmloption = content;
-SET client_min_messages = warning;
-SET row_security = off;
-
-SET default_tablespace = '';
-
-SET default_table_access_method = heap;
-
---
--- Name: no_source_code; Type: TABLE; Schema: public; Owner: proxychecker
---
-
-CREATE TABLE public.no_source_code (
-    bytecode_hash text NOT NULL,
-    CONSTRAINT no_source_code_bytecode_hash CHECK ((bytecode_hash ~ '^0x[0-9a-f]{64}$'::text))
-);
-
-
-ALTER TABLE public.no_source_code OWNER TO proxychecker;
-
---
--- Name: no_source_code no_source_code_pkey; Type: CONSTRAINT; Schema: public; Owner: proxychecker
---
-
-ALTER TABLE ONLY public.no_source_code
-    ADD CONSTRAINT no_source_code_pkey PRIMARY KEY (bytecode_hash);
 
 
 --

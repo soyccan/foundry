@@ -2,10 +2,7 @@ mod models;
 pub mod proxion;
 mod schema;
 
-use crate::{
-    models::{NoSourceCodeDBRow, SourceCodeDBRow},
-    schema::{etherscan_source_code, no_source_code},
-};
+use crate::{models::SourceCodeDBRow, schema::etherscan_source_code};
 use diesel::{
     r2d2::{ConnectionManager, PooledConnection},
     ExpressionMethods, PgConnection, QueryDsl, RunQueryDsl,
@@ -53,11 +50,6 @@ impl<'a, PI: ProxyInfo> EtherSync<'a, PI> {
     ) -> Result<()> {
         debug!("Syncing source code: address={} bytecode_hash={}", address, bytecode_hash);
 
-        if self.source_code_database.is_no_source_code(bytecode_hash)? {
-            debug!("No source code: address={} bytecode_hash={}", address, bytecode_hash);
-            return Ok(());
-        }
-
         if self.source_code_database.is_source_code_saved(bytecode_hash)? {
             debug!(
                 "Source code already saved: address={} bytecode_hash={}",
@@ -68,7 +60,7 @@ impl<'a, PI: ProxyInfo> EtherSync<'a, PI> {
 
         if self.proxy_info.is_minimal_proxy(address)? {
             debug!("Skipping minimal proxy: address={} bytecode_hash={}", address, bytecode_hash);
-            self.source_code_database.set_no_source_code(bytecode_hash)?;
+            self.source_code_database.set_no_source_code(address, bytecode_hash)?;
             return Ok(());
         }
 
@@ -84,7 +76,7 @@ impl<'a, PI: ProxyInfo> EtherSync<'a, PI> {
                         "Source code not verified: address={} bytecode_hash={}",
                         address, bytecode_hash
                     );
-                    self.source_code_database.set_no_source_code(bytecode_hash)?;
+                    self.source_code_database.set_no_source_code(address, bytecode_hash)?;
                 } else {
                     return Err(e);
                 }
@@ -130,14 +122,6 @@ impl SourceCodeDatabase {
     //         ),
     //     })
     // }
-
-    pub fn is_no_source_code(&mut self, bytecode_hash: &str) -> Result<bool> {
-        diesel::select(diesel::dsl::exists(
-            no_source_code::table.filter(no_source_code::bytecode_hash.eq(bytecode_hash)),
-        ))
-        .get_result(&mut self.connection)
-        .wrap_err_with(|| "Failed to check if no source code")
-    }
 
     pub fn is_source_code_saved(&mut self, bytecode_hash: &str) -> Result<bool> {
         diesel::select(diesel::dsl::exists(
@@ -188,23 +172,24 @@ impl SourceCodeDatabase {
             .values(SourceCodeDBRow {
                 bytecode_hash: bytecode_hash.to_owned(),
                 address: address.to_owned(),
+                verified: true,
                 source_code_file,
                 source_code_files,
                 source_code_language,
                 source_code_settings,
                 abi: serde_json::from_str(source_code.abi.as_str())?,
-                contract_name: source_code.contract_name,
-                compiler_version: source_code.compiler_version,
-                optimization_used: source_code.optimization_used as i32,
-                runs: source_code.runs as i32,
-                constructor_arguments: source_code.constructor_arguments.into(),
-                evm_version: source_code.evm_version,
-                library: source_code.library,
-                license_type: source_code.license_type,
-                proxy: source_code.proxy > 0,
+                contract_name: Some(source_code.contract_name),
+                compiler_version: Some(source_code.compiler_version),
+                optimization_used: Some(source_code.optimization_used as i32),
+                runs: Some(source_code.runs as i32),
+                constructor_arguments: Some(source_code.constructor_arguments.into()),
+                evm_version: Some(source_code.evm_version),
+                library: Some(source_code.library),
+                license_type: Some(source_code.license_type),
+                proxy: Some(source_code.proxy > 0),
                 // the debug form of alloy_primitives::Address is lowercase hex without checksum
                 implementation: source_code.implementation.map(|x| format!("{:?}", x)),
-                swarm_source: source_code.swarm_source,
+                swarm_source: Some(source_code.swarm_source),
             })
             .on_conflict_do_nothing()
             .execute(&mut self.connection)
@@ -212,9 +197,14 @@ impl SourceCodeDatabase {
             .wrap_err_with(|| "Failed to save source code into database")
     }
 
-    pub fn set_no_source_code(&mut self, bytecode_hash: &str) -> Result<()> {
-        diesel::insert_into(no_source_code::table)
-            .values(NoSourceCodeDBRow { bytecode_hash: bytecode_hash.to_owned() })
+    pub fn set_no_source_code(&mut self, address: &str, bytecode_hash: &str) -> Result<()> {
+        diesel::insert_into(etherscan_source_code::table)
+            .values(SourceCodeDBRow {
+                bytecode_hash: bytecode_hash.to_owned(),
+                address: address.to_owned(),
+                verified: false,
+                ..Default::default()
+            })
             .on_conflict_do_nothing()
             .execute(&mut self.connection)
             .map(|_nrows| ())

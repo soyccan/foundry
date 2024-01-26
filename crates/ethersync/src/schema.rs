@@ -10,28 +10,18 @@ diesel::table! {
         source_code_files -> Nullable<Jsonb>,
         source_code_language -> Nullable<Text>,
         source_code_settings -> Nullable<Jsonb>,
-        abi -> Jsonb,
-        contract_name -> Text,
-        compiler_version -> Text,
-        optimization_used -> Int4,
-        runs -> Int4,
-        constructor_arguments -> Bytea,
-        evm_version -> Text,
-        library -> Text,
-        license_type -> Text,
-        proxy -> Bool,
+        abi -> Nullable<Jsonb>,
+        contract_name -> Nullable<Text>,
+        compiler_version -> Nullable<Text>,
+        optimization_used -> Nullable<Int4>,
+        runs -> Nullable<Int4>,
+        constructor_arguments -> Nullable<Bytea>,
+        evm_version -> Nullable<Text>,
+        library -> Nullable<Text>,
+        license_type -> Nullable<Text>,
+        proxy -> Nullable<Bool>,
         implementation -> Nullable<Text>,
-        swarm_source -> Text,
+        swarm_source -> Nullable<Text>,
+        verified -> Bool,
     }
 }
-
-diesel::table! {
-    no_source_code (bytecode_hash) {
-        bytecode_hash -> Text,
-    }
-}
-
-diesel::allow_tables_to_appear_in_same_query!(
-    etherscan_source_code,
-    no_source_code,
-);
