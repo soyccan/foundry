@@ -58,7 +58,7 @@ impl<'a, PI: ProxyInfo> EtherSync<'a, PI> {
             return Ok(());
         }
 
-        if self.source_code_database.is_source_code_saved(address)? {
+        if self.source_code_database.is_source_code_saved(bytecode_hash)? {
             debug!(
                 "Source code already saved: address={} bytecode_hash={}",
                 address, bytecode_hash
@@ -139,9 +139,10 @@ impl SourceCodeDatabase {
         .wrap_err_with(|| "Failed to check if no source code")
     }
 
-    pub fn is_source_code_saved(&mut self, address: &str) -> Result<bool> {
+    pub fn is_source_code_saved(&mut self, bytecode_hash: &str) -> Result<bool> {
         diesel::select(diesel::dsl::exists(
-            etherscan_source_code::table.filter(etherscan_source_code::address.eq(address)),
+            etherscan_source_code::table
+                .filter(etherscan_source_code::bytecode_hash.eq(bytecode_hash)),
         ))
         .get_result(&mut self.connection)
         .wrap_err_with(|| "Failed to check if source code is saved")
