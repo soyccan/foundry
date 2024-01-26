@@ -12,7 +12,7 @@ use foundry_block_explorers::Client as EtherscanClient;
 use futures::StreamExt;
 use log::{error, info};
 use sqlx::Row;
-use std::{cell::RefCell, env, rc::Rc, time::Instant};
+use std::{env, rc::Rc, time::Instant};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -36,20 +36,20 @@ async fn main() -> Result<()> {
             .with_url(get_env_var("ETHERSCAN_API_URL")?.as_str())?
             .build()?,
     ));
-    let source_code_db_conn = Rc::new(RefCell::new(
+    let source_code_db_conn = Rc::new(
         Pool::builder()
             .max_size(max_concurrent)
             .build(ConnectionManager::<PgConnection>::new(get_env_var("DATABASE_URL")?.as_str()))
             .wrap_err_with(|| "Failed to connect to the database")?,
-    ));
-    let proxion_db_conn = Rc::new(RefCell::new(
+    );
+    let proxion_db_conn = Rc::new(
         Pool::builder()
             .max_size(max_concurrent)
             .build(ConnectionManager::<PgConnection>::new(
                 get_env_var("DATABASE_URL_PROXION")?.as_str(),
             ))
             .wrap_err_with(|| "Failed to connect to the database")?,
-    ));
+    );
 
     alive_contracts
         .for_each_concurrent(max_concurrent as usize, |row| async {
@@ -72,9 +72,8 @@ async fn main() -> Result<()> {
                 };
 
                 let mut source_code_database =
-                    SourceCodeDatabase::new(source_code_db_conn.borrow().get().unwrap());
-                let mut proxion_database =
-                    ProxionDatabase::new(proxion_db_conn.borrow().get().unwrap());
+                    SourceCodeDatabase::new(source_code_db_conn.get().unwrap());
+                let mut proxion_database = ProxionDatabase::new(proxion_db_conn.get().unwrap());
                 let mut ethersync =
                     EtherSync::new(&etherscan, &mut source_code_database, &mut proxion_database);
 
